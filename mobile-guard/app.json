@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "TASK-Garita",
+    "slug": "tas-k-guard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "taskgarita",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.taskontrol.garita",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.taskontrol.garita",
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f7e150c8-2f32-4970-99d0-776deb6a6c00"
+      }
+    },
+    "owner": "tas-kontrol",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f7e150c8-2f32-4970-99d0-776deb6a6c00"
+    }
+  }
+}

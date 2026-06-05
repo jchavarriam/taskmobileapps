@@ -1,0 +1,38 @@
+# Keep EAS uploads limited to app-relevant files.
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+build/
+android/
+ios/
+
+# Local credentials and artifacts.
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.apk
+*.aab
+*.ipa
+npm-debug.*
+*.orig.*
+
+# Non-runtime docs/notes/logs.
+README.md
+*.md
+*.log
+*.tmp
+*.bak
+
+# Guard local test/debug helpers not needed for cloud builds.
+test*.js
+*Test*.tsx
+
+# Editor/assistant metadata.
+.DS_Store
+.vscode/
+.idea/
+memories/
