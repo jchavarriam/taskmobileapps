@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { guardEntryWithCode, startGuardMediaUpload } from '@/lib/api';
@@ -36,6 +36,8 @@ export default function EntryCodeScreen() {
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('back');
   const [cameraReady, setCameraReady] = useState(false);
   const [captureCountdown, setCaptureCountdown] = useState<number>(-1);
+  const [evidencePhotos, setEvidencePhotos] = useState<string[]>([]);
+  const [capturingEvidence, setCapturingEvidence] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -306,8 +308,42 @@ export default function EntryCodeScreen() {
   const handleRetakePhoto = () => {
     uploadRef.current = null;
     setIdPhotoUri(null);
+    setEvidencePhotos([]);
     lastSpokenPhaseRef.current = null;
     setPhase('idCapture');
+  };
+
+  const handleCaptureEvidence = async () => {
+    if (capturingEvidence || busy) return;
+    try {
+      setCapturingEvidence(true);
+      let photo = await cameraRef.current?.takePictureAsync(OPTIMIZED_CAPTURE_OPTIONS);
+      if (!photo?.uri) {
+        await new Promise(resolve => setTimeout(resolve, 180));
+        photo = await cameraRef.current?.takePictureAsync(OPTIMIZED_CAPTURE_OPTIONS);
+      }
+      if (!photo?.uri) {
+        Alert.alert('Error', 'No se pudo tomar la foto');
+        return;
+      }
+      const uri = photo.uri;
+      setEvidencePhotos(prev => [...prev, uri]);
+      const currentAppMode = appMode;
+      (async () => {
+        try {
+          const uriToUpload = currentAppMode === 'KIOSKO'
+            ? uri
+            : (await preparePhotoForUpload(uri)).uri;
+          await startGuardMediaUpload('VISIT_ENTRY', uriToUpload);
+        } catch {
+          // best-effort upload
+        }
+      })();
+    } catch {
+      Alert.alert('Error', 'No se pudo capturar la foto de evidencia');
+    } finally {
+      setCapturingEvidence(false);
+    }
   };
 
   const handleScanned = async (data: string) => {
@@ -620,9 +656,27 @@ export default function EntryCodeScreen() {
           appMode === 'GUARDIA' ? (
             <>
               <Text style={styles.overlayText}>{status}</Text>
-              <TouchableOpacity style={styles.doneButton} onPress={handleManualOpenDoor} disabled={busy}>
-                <Text style={styles.doneText}>{busy ? 'Procesando...' : 'Abrir puerta'}</Text>
-              </TouchableOpacity>
+              {evidencePhotos.length > 0 && (
+                <ScrollView horizontal style={styles.evidenceRow} showsHorizontalScrollIndicator={false}>
+                  {evidencePhotos.map((uri, i) => (
+                    <Image key={i} source={{ uri }} style={styles.evidenceThumb} resizeMode="cover" />
+                  ))}
+                </ScrollView>
+              )}
+              <View style={styles.doneButtonRow}>
+                <TouchableOpacity
+                  style={styles.evidenceButton}
+                  onPress={handleCaptureEvidence}
+                  disabled={busy || capturingEvidence}
+                >
+                  <Text style={styles.evidenceButtonText}>
+                    {capturingEvidence ? '...' : '+ Foto'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.doneButton, styles.doneButtonFlex]} onPress={handleManualOpenDoor} disabled={busy}>
+                  <Text style={styles.doneText}>{busy ? 'Procesando...' : 'Abrir puerta'}</Text>
+                </TouchableOpacity>
+              </View>
             </>
           ) : (
             <View style={styles.row}>
@@ -696,6 +750,21 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#1E3A8A', padding: 14, borderRadius: 10 },
   buttonText: { color: '#fff', fontWeight: '800' },
   doneButton: { backgroundColor: '#16A34A', padding: 14, borderRadius: 10, width: '100%', alignItems: 'center' },
+  doneButtonFlex: { flex: 1, width: undefined },
+  doneButtonRow: { flexDirection: 'row', gap: 8, width: '100%', marginTop: 8 },
+  evidenceButton: {
+    backgroundColor: 'rgba(30,58,138,0.9)',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  evidenceButtonText: { color: '#93C5FD', fontWeight: '900', fontSize: 13 },
+  evidenceRow: { width: '100%', marginBottom: 6 },
+  evidenceThumb: { width: 60, height: 44, borderRadius: 6, marginRight: 6, backgroundColor: '#1E3A8A' },
   doneText: { color: '#fff', fontWeight: '900' },
   qrAlignmentBox: {
     position: 'absolute',
