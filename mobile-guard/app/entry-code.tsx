@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
-import { guardEntryWithCode, startGuardMediaUpload } from '@/lib/api';
+import { guardEntryWithCode, startGuardMediaUpload, createApprovalRequest } from '@/lib/api';
 import { DoorController, DoorControllerRef } from '../components/DoorController';
 import { QRScannerOverlay } from '../components/QRScannerOverlay';
 import { IDScannerOverlay } from '../components/IDScannerOverlay';
@@ -22,7 +22,7 @@ export default function EntryCodeScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [phase, setPhase] = useState<'idCapture' | 'idPreview' | 'qrScan' | 'opening' | 'done' | 'error'>('idCapture');
+  const [phase, setPhase] = useState<'idCapture' | 'idPreview' | 'qrScan' | 'notesReview' | 'opening' | 'done' | 'error'>('idCapture');
   const [busy, setBusy] = useState(false);
   const [idPhotoUri, setIdPhotoUri] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -36,6 +36,10 @@ export default function EntryCodeScreen() {
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('back');
   const [cameraReady, setCameraReady] = useState(false);
   const [captureCountdown, setCaptureCountdown] = useState<number>(-1);
+  const [eventLimit, setEventLimit] = useState<{ visitId: string; sectorId: string; eventName: string } | null>(null);
+  const [requestingAccess, setRequestingAccess] = useState(false);
+  const [pendingNotes, setPendingNotes] = useState<string | null>(null);
+  const [pendingVisitorName, setPendingVisitorName] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -86,6 +90,38 @@ export default function EntryCodeScreen() {
     }
   };
 
+  // Finish a successful entry: GUARDIA waits for a manual door press; KIOSKO opens
+  // the door automatically and returns home. Shared by the normal flow and the
+  // "Revisado → Continuar" button on the notes-review screen.
+  const proceedAfterEntry = async () => {
+    if (appMode === 'GUARDIA') {
+      setStatus('QR Válido - Presione Abrir puerta');
+      setStatusType('success');
+      setPhase('done');
+      return;
+    }
+
+    setStatus('QR Válido - Abriendo puerta...');
+    setStatusType('success');
+    setPhase('opening');
+
+    try {
+      await openPrimaryDoor();
+      console.log('🎉 Door opened successfully!');
+    } catch (err) {
+      const doorErrorMsg = err instanceof Error ? err.message : 'No se pudo abrir la puerta';
+      console.log('🚪 Entry - Door controller error:', doorErrorMsg);
+      Alert.alert('Advertencia', doorErrorMsg);
+    }
+
+    setPhase('done');
+
+    // Auto-return to home after 2 seconds
+    setTimeout(() => {
+      router.replace('/home');
+    }, 2000);
+  };
+
   const handleManualOpenDoor = async () => {
     if (busy || phase !== 'done') return;
     try {
@@ -108,6 +144,35 @@ export default function EntryCodeScreen() {
       Alert.alert('Advertencia', message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Event "Solicitar Acceso": request a 1-entry approval from the event resident.
+  const handleSolicitarAcceso = async () => {
+    if (!eventLimit || requestingAccess) return;
+    if (!idPhotoUri) {
+      Alert.alert('Foto requerida', 'No hay foto del visitante para enviar la solicitud.');
+      return;
+    }
+    try {
+      setRequestingAccess(true);
+      const res: any = await createApprovalRequest({
+        flow: 'ENTRY',
+        visitorName: `Invitado de evento (${eventLimit.eventName})`,
+        sectorId: eventLimit.sectorId,
+        photoUri: idPhotoUri,
+        eventVisitId: eventLimit.visitId,
+      });
+      const requestId = String(res?.requestId ?? '');
+      if (!requestId) throw new Error('No se recibió ID de solicitud');
+      router.replace({
+        pathname: '/wait-approval',
+        params: { requestId, visitorName: eventLimit.eventName, areaName: eventLimit.eventName },
+      });
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'No se pudo enviar la solicitud');
+    } finally {
+      setRequestingAccess(false);
     }
   };
 
@@ -375,10 +440,26 @@ export default function EntryCodeScreen() {
       });
 
       // Immediately mark INSIDE with media key from pre-upload
-      await guardEntryWithCode({
+      const entryResp: any = await guardEntryWithCode({
         qrCode: code,
         mediaKey: mediaKey || undefined,
       });
+
+      // Event pass WITH a named roster: hand off to the per-guest check-in screen.
+      // The roster screen captures each guest's ID and opens the gate per guest,
+      // so we do NOT increment/open here.
+      if (entryResp?.accessType === 'EVENT' && entryResp?.hasGuestList) {
+        Speech.stop();
+        router.replace({ pathname: '/event-guests', params: { qrCode: code } });
+        return;
+      }
+
+      // Event pass (count-only): show event info; door opens like a normal entry below.
+      if (entryResp?.accessType === 'EVENT' && entryResp?.event) {
+        const ev = entryResp.event;
+        const left = ev.entriesLeft != null ? ` · Quedan ${ev.entriesLeft}` : '';
+        setStatus(`Evento: ${ev.eventName} (${ev.entriesUsed}${ev.guestCount != null ? `/${ev.guestCount}` : ''})${left}`);
+      }
 
       console.log('🎉 Entry - guardEntryWithCode successful! QR is valid');
       console.log('✅ Entry - QR Code validated:', code);
@@ -395,42 +476,17 @@ export default function EntryCodeScreen() {
       console.log('🎤 Entry - Speaking success message: Bienvenido');
       Speech.speak('Bienvenido', welcomeOptions);
 
-      if (appMode === 'GUARDIA') {
-        setStatus('QR Válido - Presione Abrir puerta');
+      // If the visit has notes, pause and show them to the guard before opening.
+      if (entryResp?.visit?.notes) {
+        setPendingNotes(String(entryResp.visit.notes));
+        setPendingVisitorName(String(entryResp.visit.visitorName || ''));
+        setStatus('QR Válido');
         setStatusType('success');
-        setPhase('done');
+        setPhase('notesReview');
         return;
       }
 
-      setStatus('QR Válido - Abriendo puerta...');
-      setStatusType('success');
-      setPhase('opening');
-
-      console.log('🚪 Entry - Starting door opening process...');
-      try {
-        await openPrimaryDoor();
-        console.log('🎉 Door opened successfully!');
-      } catch (err) {
-        const doorErrorMsg = err instanceof Error ? err.message : 'No se pudo abrir la puerta';
-        console.log('🚪 Entry - Door controller error:', {
-          error: err,
-          message: doorErrorMsg,
-          timestamp: new Date().toISOString()
-        });
-
-        console.log('📱 Entry - Showing door error alert');
-        Alert.alert('Advertencia', doorErrorMsg);
-      }
-
-      setPhase('done');
-      console.log('✅ Entry - Process completed successfully');
-
-      // Auto-return to home after 2 seconds
-      console.log('🏠 Entry - Scheduling auto-return to home in 2 seconds...');
-      setTimeout(() => {
-        console.log('🏠 Entry - Navigating back to home');
-        router.replace('/home');
-      }, 2000);
+      await proceedAfterEntry();
     } catch (err: any) {
       // Log the detailed error for debugging
       console.log('🔍 Entry Code Error Details:', {
@@ -444,6 +500,25 @@ export default function EntryCodeScreen() {
         statusCode: err.status,
         response: err.response
       });
+
+      // Event entry limit reached (still in schedule): offer "Solicitar Acceso".
+      const limitMsg = err?.data?.message || err?.message;
+      if (limitMsg === 'EVENT_ENTRY_LIMIT_REACHED') {
+        const ev = err?.data?.event || {};
+        setEventLimit({
+          visitId: String(ev.visitId || ''),
+          sectorId: String(ev.sectorId || ''),
+          eventName: String(ev.eventName || 'Evento'),
+        });
+        setStatus('Límite de Entradas a Evento Agotado');
+        setStatusType('error');
+        setPhase('error');
+        Speech.speak('Límite de entradas agotado', { language: 'es', rate: 0.8 });
+        setIsScanning(false);
+        setBusy(false);
+        scanLockRef.current = false;
+        return;
+      }
 
       // Handle different error types
       let errorMsg = 'QR inválido';
@@ -611,7 +686,22 @@ export default function EntryCodeScreen() {
             <Text style={styles.overlayText}>Procesando...</Text>
           </View>
         )}
-        {phase === 'error' && (
+        {phase === 'error' && eventLimit && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Límite de Entradas a Evento Agotado</Text>
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={handleSolicitarAcceso}
+              disabled={requestingAccess}
+            >
+              <Text style={styles.doneText}>{requestingAccess ? 'Enviando...' : 'Solicitar Acceso'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.doneButton, { backgroundColor: '#475569', marginTop: 8 }]} onPress={() => router.replace('/home')}>
+              <Text style={styles.doneText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {phase === 'error' && !eventLimit && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
@@ -633,6 +723,28 @@ export default function EntryCodeScreen() {
         )}
       </View>
 
+      {phase === 'notesReview' && (
+        <View style={styles.notesContainer}>
+          <View style={styles.notesCard}>
+            <Text style={styles.notesVisitorName}>{pendingVisitorName}</Text>
+            <View style={styles.notesDivider} />
+            <Text style={styles.notesLabel}>Notas del residente</Text>
+            <ScrollView style={styles.notesScroll} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.notesText}>{pendingNotes}</Text>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.notesButton}
+              onPress={() => {
+                setPendingNotes(null);
+                setPendingVisitorName('');
+                void proceedAfterEntry();
+              }}
+            >
+              <Text style={styles.notesButtonText}>✓ Revisado → Continuar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Hidden Door Controller */}
       <DoorController ref={doorControllerRef} />
@@ -642,6 +754,67 @@ export default function EntryCodeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  notesContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0a0a0a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 2000,
+  },
+  notesCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 12,
+    padding: 24,
+    width: '100%',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  notesVisitorName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  notesDivider: {
+    height: 1,
+    backgroundColor: '#2c2c2e',
+    marginBottom: 12,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8e8e93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  notesScroll: {
+    maxHeight: 200,
+    marginBottom: 20,
+  },
+  notesText: {
+    fontSize: 16,
+    color: '#e5e5ea',
+    lineHeight: 24,
+  },
+  notesButton: {
+    backgroundColor: '#30d158',
+    borderRadius: 10,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  notesButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+  },
   header: {
     height: 64,
     paddingHorizontal: 16,

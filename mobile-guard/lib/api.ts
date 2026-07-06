@@ -121,7 +121,10 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
         console.log('Error Response Text:', errorText);
         errorData = { message: errorText || `HTTP ${response.status}` };
       }
-      throw new Error(errorData.message || `HTTP ${response.status}`);
+      const apiError: any = new Error(errorData.message || `HTTP ${response.status}`);
+      apiError.status = response.status;
+      apiError.data = errorData;
+      throw apiError;
     }
 
     const result = await response.json();
@@ -225,9 +228,18 @@ async function uploadGuardMedia(params: {
   const uploadResponse = await fetch(signed.uploadUrl, {
     method: 'PUT',
     headers: {
-      'Content-Type': mime,
+      'x-upsert': 'false',
     },
-    body: uploadBody.body,
+    body: (() => {
+      const form = new FormData();
+      form.append('cacheControl', '3600');
+      form.append('file', {
+        uri: params.photoUri,
+        type: mime,
+        name: `guard-photo.${ext}`,
+      } as any);
+      return form;
+    })(),
     ...(params.signal ? { signal: params.signal } : {}),
   });
 
@@ -288,6 +300,53 @@ export async function guardExitWithCode(params: {
   });
 }
 
+export interface EventGuest {
+  id: string;
+  firstName: string;
+  lastName: string;
+  checkedInAt: string | null;
+}
+
+export interface EventGuestsResponse {
+  success: boolean;
+  event: {
+    visitId: string;
+    eventName: string;
+    guestCount: number | null;
+    entriesUsed: number;
+    exitsUsed: number;
+    eventStartAt: string | null;
+    eventEndAt: string | null;
+  };
+  guests: EventGuest[];
+}
+
+// Fetch the named roster for an event pass (resolved via the scanned QR).
+export async function getEventGuests(params: { qrCode: string }): Promise<EventGuestsResponse> {
+  const qs = new URLSearchParams({ qrCode: params.qrCode });
+  return await apiCall<EventGuestsResponse>(`/api/guard/event/guests?${qs.toString()}`, {
+    method: 'GET',
+  });
+}
+
+// Check in a single named guest of an event pass: claims a slot against the
+// shared cap and attaches the guest's ID photo. Throws on EVENT_ENTRY_LIMIT_REACHED.
+export async function eventGuestCheckin(params: {
+  qrCode?: string;
+  eventVisitId?: string;
+  guestId: string;
+  mediaKey?: string;
+}) {
+  const payload: Record<string, unknown> = { guestId: params.guestId };
+  if (params.qrCode) payload.qrCode = params.qrCode;
+  if (params.eventVisitId) payload.eventVisitId = params.eventVisitId;
+  if (params.mediaKey) payload.photoKey = params.mediaKey;
+  return await apiCall('/api/guard/event/checkin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getSiteMap(options?: { force?: boolean }) {
   const now = Date.now();
   if (!options?.force && siteMapCache && now - siteMapCacheAt < SITE_MAP_CACHE_MS) {
@@ -319,6 +378,7 @@ export async function createApprovalRequest(params: {
   sectorId: string;
   photoUri: string;
   mediaKey?: string;
+  eventVisitId?: string;
 }) {
   let resolvedMediaKey = params.mediaKey;
 
@@ -349,10 +409,7 @@ export async function createApprovalRequest(params: {
       visitorName: params.visitorName,
       sectorId: params.sectorId,
       photoKey: resolvedMediaKey,
-      // Legacy field names for backward compatibility with older server deployments
-      photoMediaKey: resolvedMediaKey,
-      photoMediaMime: 'image/jpeg',
-      photoMediaBytes: 1,
+      ...(params.eventVisitId ? { eventVisitId: params.eventVisitId } : {}),
     }),
   });
 }

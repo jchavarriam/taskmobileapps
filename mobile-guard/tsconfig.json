@@ -13,5 +13,13 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "controllerTCP.ts",
+    "ControllerWebView.tsx",
+    "DirectWebViewTest.tsx",
+    "UpdatedWebViewTest.tsx",
+    "test*.js"
   ]
 }

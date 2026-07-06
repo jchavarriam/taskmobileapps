@@ -1,7 +1,7 @@
 // components/DoorController.tsx
-import React, { useRef, useImperativeHandle, forwardRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import React, { useImperativeHandle, forwardRef, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 
 export interface DoorControllerRef {
   openDoor: (
@@ -12,178 +12,232 @@ export interface DoorControllerRef {
   ) => Promise<{ success: boolean; message: string }>;
 }
 
-export const DoorController = forwardRef<DoorControllerRef, {}>((_props, ref) => {
-  const webViewRef = useRef<WebView>(null);
-  const [url, setUrl] = useState('about:blank');
-  const currentRequestUrlRef = useRef<string>('');
-  const requestInFlightRef = useRef(false);
+const DOOR_TIMEOUT_MS = 6000;
 
-  // Store resolve function for the promise
-  const resolveRef = useRef<((result: { success: boolean; message: string }) => void) | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+type DoorResult = { success: boolean; message: string };
+type DoorRequest = {
+  host: string;
+  door: string;
+  username: string;
+  password: string;
+  headerUrl: string;
+  legacyUrl: string;
+};
 
-  const finalize = (result: { success: boolean; message: string }) => {
-    if (!resolveRef.current) return;
-    resolveRef.current(result);
-    resolveRef.current = null;
-    requestInFlightRef.current = false;
-    currentRequestUrlRef.current = '';
-    cleanup();
+function normalizeControllerHost(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/, '');
+}
+
+function encodeBase64(str: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+
+  while (i < str.length) {
+    const a = str.charCodeAt(i++);
+    const b = i < str.length ? str.charCodeAt(i++) : 0;
+    const c = i < str.length ? str.charCodeAt(i++) : 0;
+    const bitmap = (a << 16) | (b << 8) | c;
+
+    result += chars.charAt((bitmap >> 18) & 63);
+    result += chars.charAt((bitmap >> 12) & 63);
+    result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+    result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
+  }
+
+  return result;
+}
+
+function buildControllerUrls(ip: string, door: string, username: string, password: string) {
+  const host = normalizeControllerHost(ip);
+  const safeDoor = encodeURIComponent(String(door || '').trim());
+  const path = `/cdor.cgi?open=1&door=${safeDoor}`;
+  const authUsername = encodeURIComponent(String(username || '').trim());
+  const authPassword = encodeURIComponent(String(password || '').trim());
+
+  return {
+    host,
+    headerUrl: `http://${host}${path}`,
+    legacyUrl: `http://${authUsername}:${authPassword}@${host}${path}`,
+    debugUrl: `http://${host}${path}`,
+    legacyDebugUrl: `http://${authUsername}:****@${host}${path}`,
   };
+}
 
-  // Cleanup function
+async function openWithHeaderAuth(request: DoorRequest): Promise<DoorResult> {
+  const credentials = encodeBase64(`${request.username}:${request.password}`);
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), DOOR_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(request.headerUrl, {
+      method: 'GET',
+      headers: { Authorization: `Basic ${credentials}` },
+      signal: abortController.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        message: `Credenciales incorrectas (${response.status}). URL: http://${request.host}/cdor.cgi?open=1&door=${encodeURIComponent(request.door)}`,
+      };
+    }
+
+    return { success: true, message: 'Puerta abierta' };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    const msg = String(error?.message || '').toLowerCase();
+
+    if (error?.name === 'AbortError' || msg.includes('aborted') || msg.includes('abort')) {
+      return { success: true, message: 'Comando enviado al controlador' };
+    }
+
+    if (
+      msg.includes('econnreset') ||
+      msg.includes('connection reset') ||
+      msg.includes('empty response') ||
+      msg.includes('unexpected end') ||
+      msg.includes('socket')
+    ) {
+      return { success: true, message: 'Comando enviado al controlador' };
+    }
+
+    return { success: false, message: `No se pudo conectar al controlador (${error?.message || 'error de red'})` };
+  }
+}
+
+export const DoorController = forwardRef<DoorControllerRef, {}>((_, ref) => {
+  const [url, setUrl] = useState('about:blank');
+  const webViewRef = useRef<WebView>(null);
+  const requestRef = useRef<DoorRequest | null>(null);
+  const resolveRef = useRef<((result: DoorResult) => void) | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryingAuthRef = useRef(false);
+
   const cleanup = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
+    requestRef.current = null;
+    retryingAuthRef.current = false;
     setUrl('about:blank');
   };
 
-  // Expose openDoor method
+  const finalize = (result: DoorResult) => {
+    if (!resolveRef.current) return;
+    const resolve = resolveRef.current;
+    resolveRef.current = null;
+    cleanup();
+    resolve(result);
+  };
+
+  const fallbackToHeaderAuth = async () => {
+    const request = requestRef.current;
+    if (!request) return;
+    retryingAuthRef.current = true;
+    const result = await openWithHeaderAuth(request);
+    finalize(result);
+  };
+
   useImperativeHandle(ref, () => ({
     openDoor: (ip, door, username, password) => {
+      const safeUsername = String(username || '').trim();
+      const safePassword = String(password || '').trim();
+      const safeDoor = String(door || '').trim();
+      const { host, headerUrl, legacyUrl, debugUrl, legacyDebugUrl } = buildControllerUrls(
+        ip,
+        safeDoor,
+        safeUsername,
+        safePassword
+      );
+
       return new Promise((resolve) => {
+        console.log('Door controller URL:', debugUrl);
+        console.log('Door controller legacy URL:', legacyDebugUrl);
+        console.log('Door controller user:', safeUsername);
+
         resolveRef.current = resolve;
-
-        // Build URL with embedded credentials
-        const controllerUrl = `http://${username}:${password}@${ip}/cdor.cgi?open=1&door=${door}`;
-        currentRequestUrlRef.current = controllerUrl;
-        requestInFlightRef.current = true;
-
-
-        // Safety timeout - resolve after 5 seconds if no response
+        requestRef.current = {
+          host,
+          door: safeDoor,
+          username: safeUsername,
+          password: safePassword,
+          headerUrl,
+          legacyUrl,
+        };
+        retryingAuthRef.current = false;
         timeoutRef.current = setTimeout(() => {
-          console.log('Timeout reached - assuming success');
-          finalize({ success: true, message: 'Door command sent' });
-        }, 5000);
-
-        // Navigate to controller
-        setUrl(controllerUrl);
+          finalize({ success: true, message: 'Comando enviado al controlador' });
+        }, DOOR_TIMEOUT_MS);
+        setUrl(legacyUrl);
       });
     },
   }));
 
-  const handleNavigationStateChange = (navState: WebViewNavigation) => {
-    // Check if navigation to controller completed
-    if (navState.url.includes('cdor.cgi') && !navState.loading) {
-      console.log('✅ Controller navigation completed');
-    }
-  };
-
-  const handleLoadEnd = () => {
-    // Inject script to check page content
-    webViewRef.current?.injectJavaScript(`
-      (function() {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          url: window.location.href,
-          body: document.body ? document.body.innerText : '',
-          bodyLength: document.body ? document.body.innerText.length : 0
-        }));
-      })();
-      true;
-    `);
-  };
-
-  const handleHttpError = (event: any) => {
-    const statusCode = event.nativeEvent.statusCode;
-    const url = event.nativeEvent.url;
-
-    if (statusCode === 401 || statusCode === 403) {
-      finalize({
-        success: false,
-        message: `HTTP Error: ${statusCode} - ${url}`,
-      });
-      return;
-    }
-
-    if (requestInFlightRef.current && currentRequestUrlRef.current.includes('cdor.cgi')) {
-      finalize({ success: true, message: 'Door command sent' });
-      return;
-    }
-
-    finalize({
-      success: false,
-      message: `HTTP Error: ${statusCode} - ${url}`,
-    });
-  };
-
-  const handleError = (event: any) => {
-    const description = String(event?.nativeEvent?.description || '').toLowerCase();
-    const failingUrl = String(event?.nativeEvent?.url || '');
-
-    const isSocketClose =
-      description.includes('socket') ||
-      description.includes('econnreset') ||
-      description.includes('unexpected end of stream') ||
-      description.includes('connection reset') ||
-      description.includes('empty response');
-
-    const isControllerCall =
-      requestInFlightRef.current &&
-      (currentRequestUrlRef.current.includes('cdor.cgi') || failingUrl.includes('cdor.cgi'));
-
-    if (isSocketClose && isControllerCall) {
-      finalize({ success: true, message: 'Door command sent' });
-      return;
-    }
-
-    if (isControllerCall) {
-      finalize({ success: false, message: 'No se pudo abrir la puerta' });
-      return;
-    }
-
-    finalize({ success: false, message: 'Error de conexión con controlador' });
-  };
-
-  const handleMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-
-      // Check if we're on the controller URL
-      if (data.url && data.url.includes('cdor.cgi')) {
-        // Check for auth error in body
-        if (data.body && (data.body.includes('401') || data.body.includes('Unauthorized'))) {
-          resolveRef.current?.({ success: false, message: 'Authentication failed' });
-        } else if (data.bodyLength === 0) {
-          // Empty body = success!
-          resolveRef.current?.({ success: true, message: 'Door opened!' });
-        } else {
-          resolveRef.current?.({ success: false, message: 'Unexpected response' });
-        }
-
-        resolveRef.current = null;
-        cleanup();
-      }
-    } catch (e) {
-      // Message parse error - ignore
-    }
-  };
-
   return (
-    <View style={styles.container}>
+    <View style={styles.hidden}>
       <WebView
         ref={webViewRef}
         source={{ uri: url }}
-        onNavigationStateChange={handleNavigationStateChange}
-        onLoadEnd={handleLoadEnd}
-        onHttpError={handleHttpError}
-        onError={handleError}
-        onMessage={handleMessage}
-        javaScriptEnabled={true}
+        onLoadEnd={() => {
+          if (requestRef.current && !retryingAuthRef.current) {
+            finalize({ success: true, message: 'Puerta abierta' });
+          }
+        }}
+        onHttpError={(event) => {
+          const statusCode = event.nativeEvent.statusCode;
+          if (statusCode === 401 || statusCode === 403) {
+            fallbackToHeaderAuth();
+            return;
+          }
+
+          if (requestRef.current) {
+            finalize({ success: true, message: 'Comando enviado al controlador' });
+          }
+        }}
+        onError={(event) => {
+          const description = String(event?.nativeEvent?.description || '').toLowerCase();
+          const isControllerClose =
+            description.includes('socket') ||
+            description.includes('econnreset') ||
+            description.includes('unexpected end') ||
+            description.includes('connection reset') ||
+            description.includes('empty response');
+
+          if (isControllerClose) {
+            finalize({ success: true, message: 'Comando enviado al controlador' });
+            return;
+          }
+
+          fallbackToHeaderAuth();
+        }}
+        javaScriptEnabled
         mixedContentMode="always"
         originWhitelist={['*']}
-        sharedCookiesEnabled={true}
+        sharedCookiesEnabled
+        thirdPartyCookiesEnabled
+        style={styles.webview}
       />
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  container: {
-    width: 0,
-    height: 0,
+  hidden: {
     position: 'absolute',
+    left: -1000,
+    top: -1000,
+    width: 1,
+    height: 1,
     opacity: 0,
+  },
+  webview: {
+    width: 1,
+    height: 1,
   },
 });

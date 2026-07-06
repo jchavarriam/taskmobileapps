@@ -18,3 +18,6 @@ ios/build/
 .env.*
 !.env.example
 .DS_Store
+
+# Device log dumps (local only)
+mobile-guard/logs/

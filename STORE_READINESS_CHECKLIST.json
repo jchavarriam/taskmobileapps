@@ -1,0 +1,101 @@
+{
+  "_meta": {
+    "audit_date": "2026-06-19",
+    "repo": "/opt/visitas-superadmin/taskmobileapps",
+    "expo_account": "jchavarriam",
+    "accessible_orgs": ["jchavarriam", "tas-kontrol"],
+    "git_branch": "main",
+    "git_remote": "https://github.com/jchavarriam/taskmobileapps.git",
+    "latest_commit": "be8deaa",
+    "working_tree_dirty": true,
+    "notes": "No builds/submits/deletions were performed. Guard EAS project is not accessible by the logged-in account."
+  },
+  "guard_android": {
+    "status": "Not ready",
+    "can_build": false,
+    "can_submit": false,
+    "blockers": [
+      "EAS project 1d299709-871d-4d06-a334-14215918539a is owned by org 'tashonduras'; logged-in account 'jchavarriam' is not authorized (Entity not authorized) -> cannot build, read credentials, or submit",
+      "app.json owner/projectId mismatch vs handoff doc (was tas-kontrol/f7e150c8...), app re-pointed to inaccessible org",
+      "App icon/splash assets (mobile-guard/assets/) and app/event-guests.tsx are untracked/uncommitted in git",
+      "No submit profile in eas.json; Play Console app existence unknown; no service-account JSON",
+      "Store listing + Data Safety + privacy policy not prepared"
+    ],
+    "required_fixes": [
+      "Resolve ownership: add jchavarriam/tas-kontrol to tashonduras org OR re-point owner+projectId to a tas-kontrol project then eas init + reconfigure Android credentials (REQUIRES APPROVAL)",
+      "Commit and push mobile-guard/assets/, event-guests.tsx, and config changes",
+      "Add expo-camera plugin with cameraPermission string (currently only a dependency, CAMERA auto-merged on Android)",
+      "Add Android submit profile (serviceAccountKeyPath + track) once Play service account exists",
+      "Sanitize controller credential logging in lib/api.ts openControllerDoor (currently gated by __DEV__)"
+    ],
+    "missing_assets": [
+      "Google Play listing: short description, full description",
+      "Phone + tablet screenshots",
+      "Feature graphic 1024x500",
+      "Privacy policy URL (captures visitor/ID photos)",
+      "Data Safety answers (camera/photos, account data)",
+      "Content rating questionnaire",
+      "Contact email, category, target audience"
+    ],
+    "commands_after_approval": [
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile-guard && npx eas build --platform android --profile production",
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile-guard && npx eas submit --platform android --profile production"
+    ]
+  },
+  "resident_android": {
+    "status": "Almost ready",
+    "can_build": true,
+    "can_submit": false,
+    "blockers": [
+      "Production bug: mobile/app/(tabs)/index.tsx normalizeServerUrl rewrites host 179.63.252.22/localhost/127.0.0.1 to hardcoded LAN 192.168.1.51 -> breaks real users",
+      "eas.json submit.production is empty {}; no Play service-account JSON; Play Console app existence unknown",
+      "Store listing + Data Safety + privacy policy not prepared",
+      "Production-ready source not committed/pushed (working tree dirty, single-commit history)",
+      "expo-doctor: missing peer dependency expo-constants + 6 patch-version mismatches"
+    ],
+    "required_fixes": [
+      "Remove or __DEV__-gate the LAN host rewrite in normalizeServerUrl",
+      "npx expo install expo-constants; npx expo install --check to align patch versions",
+      "Add Android submit profile (serviceAccountKeyPath + track) and create/verify Play Console app",
+      "Commit and push working tree; tag launch baseline"
+    ],
+    "missing_assets": [
+      "Google Play listing: short + full description",
+      "Phone screenshots",
+      "Feature graphic 1024x500",
+      "Privacy policy URL (accounts + push tokens)",
+      "Data Safety answers",
+      "Content rating, category, contact email, target audience"
+    ],
+    "commands_after_approval": [
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile && npx eas build --platform android --profile production",
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile && npx eas submit --platform android --profile production"
+    ]
+  },
+  "resident_ios": {
+    "status": "Almost ready",
+    "can_build": true,
+    "can_submit": true,
+    "blockers": [
+      "Same normalizeServerUrl LAN-rewrite bug (shared screen) -> risks Apple non-functional rejection",
+      "App Store Connect metadata incomplete: screenshots, description, keywords, App Privacy answers, age rating, privacy policy URL",
+      "Not yet submitted for App Store review (currently on TestFlight only)"
+    ],
+    "required_fixes": [
+      "Remove or __DEV__-gate the LAN host rewrite in normalizeServerUrl",
+      "Complete App Store Connect listing + App Privacy answers",
+      "Provide demo account + review notes (login gated by activation)",
+      "Align expo patch versions (shared with Android fix)"
+    ],
+    "missing_assets": [
+      "App name, subtitle, description, keywords",
+      "Screenshots 6.7-inch + 6.5-inch iPhone + 12.9-inch iPad (supportsTablet true)",
+      "Support URL, privacy policy URL",
+      "App Privacy answers, age rating, review notes, demo account"
+    ],
+    "commands_after_approval": [
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile && npx eas build --platform ios --profile production",
+      "cd /opt/visitas-superadmin/taskmobileapps/mobile && npx eas submit --platform ios --profile production"
+    ]
+  }
+}

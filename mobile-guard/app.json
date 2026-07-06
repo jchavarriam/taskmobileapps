@@ -4,6 +4,7 @@
     "slug": "tas-k-guard",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "taskgarita",
     "platforms": [
@@ -19,10 +20,27 @@
     },
     "android": {
       "package": "com.taskontrol.garita",
-      "usesCleartextTraffic": true
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B3F82"
+      }
+    },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "newArchEnabled": false
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

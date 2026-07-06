@@ -6,6 +6,8 @@ import { getServerUrl, setServerUrl, getControllerIp, setControllerIp, getDoorNu
 import { apiCall } from '@/lib/api';
 import { DoorController, DoorControllerRef } from '../components/DoorController';
 import { runNetworkDiagnostics } from '@/lib/network-test';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 
 const CONFIG_PASSWORD = 'TASConfig1996';
 
@@ -27,6 +29,9 @@ export default function SettingsScreen() {
   const [controllerUsername2, setControllerUsername2State] = useState('');
   const [controllerPassword2, setControllerPassword2State] = useState('');
   const [doorNumber2, setDoorNumber2State] = useState('');
+  const updateCreatedAt = Updates.createdAt ? Updates.createdAt.toISOString() : 'embedded/unknown';
+  const updateProjectId = String((Constants.expoConfig?.extra as any)?.eas?.projectId || 'unknown');
+  const updateOwner = String(Constants.expoConfig?.owner || 'unknown');
 
   const normalizeServerEndpoint = (value: string) => {
     const trimmed = value.trim();
@@ -267,7 +272,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
     }
 
     try {
-      Alert.alert('Probando', 'Enviando comando al controlador...');
+      setTestResult('⏳ Probando controlador...');
       const result = await doorControllerRef.current?.openDoor(
         controllerIp,
         doorNumber,
@@ -275,12 +280,14 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         controllerPassword
       );
 
+      setTestResult('');
       if (result && result.success) {
         Alert.alert('✅ Éxito', result.message);
       } else {
         Alert.alert('❌ Error', result?.message || 'Error desconocido');
       }
     } catch (error: any) {
+      setTestResult('');
       Alert.alert('Error', `Fallo en controlador: ${error.message}`);
     }
   };
@@ -292,7 +299,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
     }
 
     try {
-      Alert.alert('Probando', 'Enviando comando al segundo controlador...');
+      setTestResult('⏳ Probando segundo controlador...');
       const result = await doorControllerRef.current?.openDoor(
         controllerIp2,
         doorNumber2,
@@ -300,12 +307,14 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         controllerPassword2
       );
 
+      setTestResult('');
       if (result && result.success) {
         Alert.alert('✅ Éxito', result.message);
       } else {
         Alert.alert('❌ Error', result?.message || 'Error desconocido');
       }
     } catch (error: any) {
+      setTestResult('');
       Alert.alert('Error', `Fallo en segundo controlador: ${error.message}`);
     }
   };
@@ -318,6 +327,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         <TextInput
           style={styles.input}
           placeholder="Contraseña"
+          placeholderTextColor="#94A3B8"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -338,6 +348,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         <TextInput
           style={styles.input}
           placeholder="URL o IP completa (ej: http://179.63.252.22:4100 o https://taskontrol-saas.vercel.app)"
+          placeholderTextColor="#94A3B8"
           value={serverUrl}
           onChangeText={setServerUrlState}
           autoCapitalize="none"
@@ -350,18 +361,21 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         <TextInput
           style={styles.input}
           placeholder="IP del controlador"
+          placeholderTextColor="#94A3B8"
           value={controllerIp}
           onChangeText={setControllerIpState}
         />
         <TextInput
           style={styles.input}
           placeholder="Nombre de usuario"
+          placeholderTextColor="#94A3B8"
           value={controllerUsername}
           onChangeText={setControllerUsernameState}
         />
         <TextInput
           style={styles.input}
           placeholder="Contraseña"
+          placeholderTextColor="#94A3B8"
           value={controllerPassword}
           onChangeText={setControllerPasswordState}
           secureTextEntry
@@ -369,6 +383,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         <TextInput
           style={styles.input}
           placeholder="Número de puerta"
+          placeholderTextColor="#94A3B8"
           value={doorNumber}
           onChangeText={setDoorNumberState}
         />
@@ -419,18 +434,21 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
           <TextInput
             style={styles.input}
             placeholder="IP del segundo controlador"
+            placeholderTextColor="#94A3B8"
             value={controllerIp2}
             onChangeText={setControllerIp2State}
           />
           <TextInput
             style={styles.input}
             placeholder="Nombre de usuario (segundo controlador)"
+            placeholderTextColor="#94A3B8"
             value={controllerUsername2}
             onChangeText={setControllerUsername2State}
           />
           <TextInput
             style={styles.input}
             placeholder="Contraseña (segundo controlador)"
+            placeholderTextColor="#94A3B8"
             value={controllerPassword2}
             onChangeText={setControllerPassword2State}
             secureTextEntry
@@ -438,6 +456,7 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
           <TextInput
             style={styles.input}
             placeholder="Número de puerta (segundo controlador)"
+            placeholderTextColor="#94A3B8"
             value={doorNumber2}
             onChangeText={setDoorNumber2State}
           />
@@ -480,6 +499,17 @@ ${result.guardStatusCode > 0 ? `• Guard: ${result.guardStatusCode} (${result.g
         <Text style={styles.signOutButtonText}>Cerrar Sesión</Text>
       </TouchableOpacity>
 
+      <View style={styles.updateInfo}>
+        <Text style={styles.updateInfoTitle}>App Update</Text>
+        <Text style={styles.updateInfoText}>Owner: {updateOwner}</Text>
+        <Text style={styles.updateInfoText}>Project: {updateProjectId}</Text>
+        <Text style={styles.updateInfoText}>Channel: {Updates.channel || 'none'}</Text>
+        <Text style={styles.updateInfoText}>Runtime: {Updates.runtimeVersion || 'unknown'}</Text>
+        <Text style={styles.updateInfoText}>Update ID: {Updates.updateId || 'embedded'}</Text>
+        <Text style={styles.updateInfoText}>Embedded: {Updates.isEmbeddedLaunch ? 'yes' : 'no'}</Text>
+        <Text style={styles.updateInfoText}>Created: {updateCreatedAt}</Text>
+      </View>
+
       {/* Hidden Door Controller */}
       <DoorController
         ref={doorControllerRef}
@@ -514,6 +544,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    color: '#0F172A',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
@@ -631,5 +662,25 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     marginBottom: 8,
+  },
+  updateInfo: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  updateInfoTitle: {
+    color: '#1E3A8A',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  updateInfoText: {
+    color: '#475569',
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: 'monospace',
   },
 });
