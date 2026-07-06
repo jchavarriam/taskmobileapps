@@ -14,6 +14,13 @@ function escapeForSingleQuoteJs(value: string): string {
 function normalizeServerUrl(rawUrl: string | null): string | null {
   if (!rawUrl) return rawUrl;
 
+  // Dev-only convenience: when running locally, rewrite hosts that are not
+  // reachable from a physical test device to the developer's LAN IP. This must
+  // NEVER run in a production build — real users legitimately point at these
+  // hosts (e.g. 179.63.252.22) and would be silently redirected to a dead LAN
+  // address, breaking the app.
+  if (!__DEV__) return rawUrl;
+
   const lanHost = '192.168.1.51';
   const unreachableHosts = new Set(['localhost', '127.0.0.1', '179.63.252.22']);
 

@@ -11,9 +11,9 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
   const requestUrl = `${serverUrl}${path}`;
 
   const authToken = await getAuthToken();
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options?.headers || {}),
+    ...((options?.headers as Record<string, string>) || {}),
   };
 
   if (authToken) {
@@ -25,6 +25,7 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
     response = await fetch(requestUrl, {
       ...options,
       headers,
+      credentials: 'include',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -41,8 +42,30 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
 
 export interface ActivateResponse {
   success: boolean;
-  token: string;
+  token?: string;
   user: User;
+}
+
+interface RawActivateResponse {
+  success: boolean;
+  token?: string;
+  accessToken?: string;
+  sessionToken?: string;
+  user?: User;
+}
+
+function resolveAuthToken(payload: {
+  token?: string;
+  accessToken?: string;
+  sessionToken?: string;
+}): string | undefined {
+  const candidates = [payload.token, payload.accessToken, payload.sessionToken];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return undefined;
 }
 
 export async function activate(activationCode: string, newPassword: string): Promise<ActivateResponse> {
@@ -68,6 +91,7 @@ export async function activate(activationCode: string, newPassword: string): Pro
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ activationCode, newPassword }),
+      credentials: 'include',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -79,20 +103,32 @@ export async function activate(activationCode: string, newPassword: string): Pro
     throw new Error(errorData.message || 'Activation failed');
   }
 
-  return await response.json();
+  const data = await response.json() as RawActivateResponse;
+  if (!data.user) {
+    throw new Error('Activation response missing user data');
+  }
+
+  return {
+    success: data.success,
+    token: resolveAuthToken(data),
+    user: data.user,
+  };
 }
 
 export interface LoginResponse {
   success: boolean;
-  token: string;
+  token?: string;
   user: User;
 }
 
 interface RawLoginResponse {
   success: boolean;
-  token: string;
+  token?: string;
+  accessToken?: string;
+  sessionToken?: string;
   user?: User;
   guard?: User;
+  resident?: User;
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -101,14 +137,14 @@ export async function login(email: string, password: string): Promise<LoginRespo
     body: JSON.stringify({ email, password }),
   });
 
-  const normalizedUser = response.user ?? response.guard;
+  const normalizedUser = response.user ?? response.resident ?? response.guard;
   if (!normalizedUser) {
     throw new Error('Login response missing user data');
   }
 
   return {
     success: response.success,
-    token: response.token,
+    token: resolveAuthToken(response),
     user: normalizedUser,
   };
 }
