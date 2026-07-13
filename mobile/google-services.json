@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "928724787945",
+    "project_id": "tas-kontrol",
+    "storage_bucket": "tas-kontrol.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928724787945:android:b9377a3b804ff0af0b8678",
+        "android_client_info": {
+          "package_name": "com.taskontrol.residente"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASy-G9VrQIALVo-Ixc_fN2uXtcggvlvfs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -30,7 +30,8 @@
         "backgroundColor": "#1E3A8A"
       },
       "package": "com.taskontrol.residente",
-      "versionCode": 2
+      "versionCode": 4,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
