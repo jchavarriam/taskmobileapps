@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { router } from 'expo-router';
 import { getServerUrl, getAuthToken, getAuthMode, getUser, setServerUrl, setAuthToken, setAuthMode, setUser, clearAll, clearAuth, User } from './storage';
 import { activate as apiActivate, login as apiLogin, fetchMe, setUnauthorizedHandler } from './api';
+import { registerResidentPushToken, deactivateResidentPushTokens } from './push';
 import { base64UrlDecode } from './utils';
 
 interface AuthState {
@@ -32,6 +33,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const sessionExpiredRef = useRef(false);
+  const pushRegisteredRef = useRef(false);
+
+  // Once per app process: ask permission (first time only) and register the
+  // device's Expo push token with the backend. Safe to call repeatedly —
+  // guarded here, and the backend upserts by token.
+  const ensurePushRegistered = () => {
+    if (pushRegisteredRef.current) return;
+    pushRegisteredRef.current = true;
+    registerResidentPushToken().catch((error) => {
+      // Android without FCM config, denied permission, or offline — retry
+      // next app launch rather than surfacing an error.
+      pushRegisteredRef.current = false;
+      console.warn('Push registration failed:', error);
+    });
+  };
 
   useEffect(() => {
     // Any authenticated request that gets a 401 (expired/revoked session)
@@ -82,6 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response?.user) {
         await setUser(response.user);
         setState((prev) => (prev.isLoggedIn ? { ...prev, user: response.user ?? prev.user } : prev));
+        // Session confirmed valid — make sure this device receives pushes
+        // (covers users who logged in before push support existed).
+        ensurePushRegistered();
       }
     } catch {
       // Network/offline errors are ignored — the user stays logged in;
@@ -139,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: response.user,
         token: authToken,
       });
+      ensurePushRegistered();
     } catch (error) {
       console.error('Activation error:', error);
       throw error;
@@ -165,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: response.user,
         token: authToken,
       });
+      ensurePushRegistered();
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -173,6 +194,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      // Best-effort: stop pushes to this device before dropping credentials.
+      await deactivateResidentPushTokens().catch(() => {});
+      pushRegisteredRef.current = false;
       await clearAll();
       setState({
         isLoading: false,
