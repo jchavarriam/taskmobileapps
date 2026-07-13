@@ -2,6 +2,26 @@
 import { getServerUrl, getAuthToken, User } from './storage';
 import { base64UrlDecode } from './utils';
 
+// Tells the server this is the resident app, so it issues the long-lived
+// app session policy instead of the short web-browser one.
+const CLIENT_HEADER = 'resident-app';
+
+// Paths where a 401 means "wrong credentials", not "session expired".
+const AUTH_EXEMPT_PATHS = [
+  '/api/resident/auth/login',
+  '/api/resident/auth/forgot-password',
+  '/api/resident/auth/reset-password',
+  '/api/resident/activate',
+];
+
+// Registered by AuthProvider: called when any authenticated request gets a 401
+// (session expired or revoked) so the app can log out cleanly.
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 export async function apiCall<T>(path: string, options?: RequestInit): Promise<T> {
   const serverUrl = await getServerUrl();
   if (!serverUrl) {
@@ -13,6 +33,7 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
   const authToken = await getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Client': CLIENT_HEADER,
     ...((options?.headers as Record<string, string>) || {}),
   };
 
@@ -33,11 +54,26 @@ export async function apiCall<T>(path: string, options?: RequestInit): Promise<T
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !AUTH_EXEMPT_PATHS.some((p) => path.startsWith(p))) {
+      unauthorizedHandler?.();
+    }
     const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
     throw new Error(errorData.message || `HTTP ${response.status}`);
   }
 
   return await response.json();
+}
+
+export interface MeResponse {
+  success: boolean;
+  user?: User;
+}
+
+// Silent session check/renewal — call on app launch and foreground. A valid
+// session gets its cookie re-stamped by the server; a dead one returns 401,
+// which triggers the unauthorized handler above.
+export async function fetchMe(): Promise<MeResponse> {
+  return apiCall<MeResponse>('/api/resident/auth/me', { method: 'GET' });
 }
 
 export interface ActivateResponse {
@@ -89,6 +125,7 @@ export async function activate(activationCode: string, newPassword: string): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Client': CLIENT_HEADER,
       },
       body: JSON.stringify({ activationCode, newPassword }),
       credentials: 'include',

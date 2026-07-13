@@ -1,7 +1,9 @@
 // mobile/lib/auth.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getServerUrl, getAuthToken, getUser, setServerUrl, setAuthToken, setUser, clearAll, User } from './storage';
-import { activate as apiActivate, login as apiLogin } from './api';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
+import { router } from 'expo-router';
+import { getServerUrl, getAuthToken, getAuthMode, getUser, setServerUrl, setAuthToken, setAuthMode, setUser, clearAll, clearAuth, User } from './storage';
+import { activate as apiActivate, login as apiLogin, fetchMe, setUnauthorizedHandler } from './api';
 import { base64UrlDecode } from './utils';
 
 interface AuthState {
@@ -29,20 +31,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: null,
   });
 
+  const sessionExpiredRef = useRef(false);
+
   useEffect(() => {
-    checkAuth();
+    // Any authenticated request that gets a 401 (expired/revoked session)
+    // logs out cleanly and routes to login — never a broken "logged in" state.
+    setUnauthorizedHandler(handleSessionExpired);
+
+    checkAuth().then(() => validateSession());
+
+    // Re-validate (and renew) the session every time the app returns to the
+    // foreground — this is what keeps active users logged in indefinitely.
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        validateSession();
+      }
+    });
+
+    return () => {
+      setUnauthorizedHandler(null);
+      subscription.remove();
+    };
   }, []);
+
+  const handleSessionExpired = async () => {
+    if (sessionExpiredRef.current) return;
+    sessionExpiredRef.current = true;
+    try {
+      await clearAuth(); // keeps serverUrl: back to login, not re-activation
+    } catch (error) {
+      console.error('Error clearing expired session:', error);
+    }
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      isLoggedIn: false,
+      user: null,
+      token: null,
+    }));
+    router.replace({ pathname: '/login', params: { expired: '1' } });
+  };
+
+  const validateSession = async () => {
+    try {
+      const user = await getUser();
+      if (!user) return;
+      // Valid session → server re-stamps the cookie (sliding renewal).
+      // Dead session → 401 → unauthorized handler takes over.
+      const response = await fetchMe();
+      if (response?.user) {
+        await setUser(response.user);
+        setState((prev) => (prev.isLoggedIn ? { ...prev, user: response.user ?? prev.user } : prev));
+      }
+    } catch {
+      // Network/offline errors are ignored — the user stays logged in;
+      // a real 401 is handled by the unauthorized handler.
+    }
+  };
 
   const checkAuth = async () => {
     try {
       const serverUrl = await getServerUrl();
       const token = await getAuthToken();
+      const authMode = await getAuthMode();
       const user = await getUser();
+      const isLoggedIn = !!user && (authMode === 'cookie' || !!token);
 
       setState({
         isLoading: false,
         isActivated: !!serverUrl,
-        isLoggedIn: !!token && !!user,
+        isLoggedIn,
         user,
         token,
       });
@@ -61,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const activate = async (activationCode: string, newPassword: string) => {
     try {
       const response = await apiActivate(activationCode, newPassword);
+      const authToken = response.token ?? null;
 
       // Extract server URL from activation code
       const [serverUrlPart] = activationCode.split(':');
@@ -68,15 +127,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Save all credentials
       await setServerUrl(serverUrl);
-      await setAuthToken(response.token);
+      await setAuthToken(authToken ?? '');
+      await setAuthMode(authToken ? 'bearer' : 'cookie');
       await setUser(response.user);
 
+      sessionExpiredRef.current = false;
       setState({
         isLoading: false,
         isActivated: true,
         isLoggedIn: true,
         user: response.user,
-        token: response.token,
+        token: authToken,
       });
     } catch (error) {
       console.error('Activation error:', error);
@@ -90,16 +151,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!response.user) {
         throw new Error('Login response missing user');
       }
+      const authToken = response.token ?? null;
 
-      await setAuthToken(response.token);
+      await setAuthToken(authToken ?? '');
+      await setAuthMode(authToken ? 'bearer' : 'cookie');
       await setUser(response.user);
 
+      sessionExpiredRef.current = false;
       setState({
         ...state,
         isLoading: false,
         isLoggedIn: true,
         user: response.user,
-        token: response.token,
+        token: authToken,
       });
     } catch (error) {
       console.error('Login error:', error);

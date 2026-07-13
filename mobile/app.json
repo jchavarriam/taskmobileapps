@@ -18,14 +18,19 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.taskontrol.residente"
+      "bundleIdentifier": "com.taskontrol.residente",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "3"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E3A8A"
       },
-      "package": "com.taskontrol.residente"
+      "package": "com.taskontrol.residente",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"

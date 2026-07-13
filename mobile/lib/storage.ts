@@ -4,8 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEYS = {
   SERVER_URL: '@taskontrol/server_url',
   AUTH_TOKEN: '@taskontrol/auth_token',
+  AUTH_MODE: '@taskontrol/auth_mode',
   USER: '@taskontrol/user',
 };
+
+export type AuthMode = 'bearer' | 'cookie';
 
 export interface User {
   id: string;
@@ -57,9 +60,40 @@ export async function getAuthToken(): Promise<string | null> {
 
 export async function setAuthToken(token: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(KEYS.AUTH_TOKEN, token);
+    const normalizedToken = typeof token === 'string' ? token.trim() : '';
+    if (!normalizedToken) {
+      await AsyncStorage.removeItem(KEYS.AUTH_TOKEN);
+      return;
+    }
+    await AsyncStorage.setItem(KEYS.AUTH_TOKEN, normalizedToken);
   } catch (error) {
     console.error('Error setting auth token:', error);
+    throw error;
+  }
+}
+
+export async function getAuthMode(): Promise<AuthMode | null> {
+  try {
+    const mode = await AsyncStorage.getItem(KEYS.AUTH_MODE);
+    if (mode === 'bearer' || mode === 'cookie') {
+      return mode;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting auth mode:', error);
+    return null;
+  }
+}
+
+export async function setAuthMode(mode: AuthMode | null | undefined): Promise<void> {
+  try {
+    if (mode !== 'bearer' && mode !== 'cookie') {
+      await AsyncStorage.removeItem(KEYS.AUTH_MODE);
+      return;
+    }
+    await AsyncStorage.setItem(KEYS.AUTH_MODE, mode);
+  } catch (error) {
+    console.error('Error setting auth mode:', error);
     throw error;
   }
 }
@@ -87,11 +121,27 @@ export async function setUser(user: User | null | undefined): Promise<void> {
   }
 }
 
+// Clears credentials but keeps the server URL, so an expired session sends the
+// user back to login — not back through site activation.
+export async function clearAuth(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([
+      KEYS.AUTH_TOKEN,
+      KEYS.AUTH_MODE,
+      KEYS.USER,
+    ]);
+  } catch (error) {
+    console.error('Error clearing auth storage:', error);
+    throw error;
+  }
+}
+
 export async function clearAll(): Promise<void> {
   try {
     await AsyncStorage.multiRemove([
       KEYS.SERVER_URL,
       KEYS.AUTH_TOKEN,
+      KEYS.AUTH_MODE,
       KEYS.USER,
     ]);
   } catch (error) {

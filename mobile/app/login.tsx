@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth';
 
 export default function Login() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; expired?: string }>();
   const { login } = useAuth();
   const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '');
   const [password, setPassword] = useState('');
@@ -42,6 +42,14 @@ export default function Login() {
 
         <View style={styles.form}>
           <Text style={styles.title}>Iniciar Sesión</Text>
+
+          {params.expired === '1' && (
+            <View style={styles.expiredBanner}>
+              <Text style={styles.expiredText}>
+                Tu sesión expiró por inactividad. Por favor inicia sesión de nuevo.
+              </Text>
+            </View>
+          )}
 
           <TextInput
             style={styles.input}
@@ -80,6 +88,8 @@ export default function Login() {
               ¿Olvidaste tu contraseña?
             </Text>
           </TouchableOpacity>
+
+          <Text style={styles.versionTag}>v.1.0.1</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -119,6 +129,16 @@ const styles = StyleSheet.create({
     color: '#1E3A8A',
     marginBottom: 24,
   },
+  expiredBanner: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  expiredText: {
+    color: '#92400E',
+    fontSize: 14,
+  },
   input: {
     backgroundColor: '#F1F5F9',
     borderRadius: 8,
@@ -148,5 +168,12 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: '#3B82F6',
     fontSize: 14,
+  },
+  versionTag: {
+    marginTop: 18,
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
