@@ -1,0 +1,40 @@
+# Root .easignore — EAS only reads this file at the repo root (the per-app
+# mobile/.easignore and mobile-guard/.easignore are NOT applied). Applies to
+# BOTH resident (mobile/) and guard (mobile-guard/) builds, so only exclude
+# things neither build needs.
+
+# VCS / assistant / workspace metadata
+.git/
+.claude/
+.agents/
+memories/
+skills-lock.json
+
+# Secrets must never reach the build archive
+.secrets/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Docs and notes (no runtime role)
+*.md
+STORE_READINESS_CHECKLIST.json
+
+# Build outputs / caches / logs
+node_modules/
+mobile/dist/
+mobile/.expo/
+mobile/web-build/
+mobile-guard/dist/
+mobile-guard/.expo/
+mobile-guard/web-build/
+mobile-guard/logs/
+*.log
+*.tmp
+*.bak
+*.apk
+*.aab
+*.ipa
+.DS_Store

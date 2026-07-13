@@ -21,3 +21,4 @@ ios/build/
 
 # Device log dumps (local only)
 mobile-guard/logs/
+.secrets/
