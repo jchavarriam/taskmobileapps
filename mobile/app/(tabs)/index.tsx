@@ -1,11 +1,25 @@
 // mobile/app/(tabs)/index.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 import { useAuth } from '@/lib/auth';
 import { getServerUrl } from '@/lib/storage';
+
+// Version/OTA identity shown by the web portal (Perfil) — lets support see
+// which bundle a device is actually running. updateId is null on the factory
+// (embedded) bundle, set once an OTA has been applied.
+const APP_INFO_JSON = JSON.stringify({
+  appVersion: Constants.expoConfig?.version ?? null,
+  platform: Platform.OS,
+  updateId: Updates.updateId ?? null,
+  updateCreatedAt: Updates.createdAt ? new Date(Updates.createdAt).toISOString() : null,
+  embedded: Updates.isEmbeddedLaunch,
+  channel: Updates.channel ?? null,
+});
 
 function escapeForSingleQuoteJs(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -71,10 +85,13 @@ export default function HomeTab() {
   }, []);
 
   const injectedStorage = useMemo(() => {
-    if (!token || !user) return undefined;
-
-    const tokenEscaped = escapeForSingleQuoteJs(token);
-    const userJsonEscaped = escapeForSingleQuoteJs(JSON.stringify(user));
+    // Viewport/safe-area CSS and app info are always injected; auth values
+    // only when available (in cookie mode there is no token — the session
+    // travels via the shared cookie store).
+    const authLines = [
+      token ? `localStorage.setItem('resident_token', '${escapeForSingleQuoteJs(token)}');` : '',
+      user ? `localStorage.setItem('resident_user', '${escapeForSingleQuoteJs(JSON.stringify(user))}');` : '',
+    ].join('\n          ');
 
     return `
       (function() {
@@ -95,8 +112,8 @@ export default function HomeTab() {
             document.head.appendChild(style);
           }
 
-          localStorage.setItem('resident_token', '${tokenEscaped}');
-          localStorage.setItem('resident_user', '${userJsonEscaped}');
+          ${authLines}
+          localStorage.setItem('tas_app_info', '${escapeForSingleQuoteJs(APP_INFO_JSON)}');
         } catch (e) {}
       })();
       true;
