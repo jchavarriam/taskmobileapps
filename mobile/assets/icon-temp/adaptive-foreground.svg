@@ -1,0 +1,111 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cabinet" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FAFCFD"/>
+      <stop offset="0.45" stop-color="#DDE5EA"/>
+      <stop offset="1" stop-color="#AEBCC6"/>
+    </linearGradient>
+    <linearGradient id="cabinetSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8496A4"/>
+      <stop offset="1" stop-color="#5E7180"/>
+    </linearGradient>
+    <linearGradient id="boom" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#EDF1F4"/>
+      <stop offset="1" stop-color="#AFBEC8"/>
+    </linearGradient>
+    <linearGradient id="stripe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF5A4E"/>
+      <stop offset="0.5" stop-color="#E53935"/>
+      <stop offset="1" stop-color="#B71C1C"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4C5A66"/>
+      <stop offset="1" stop-color="#28313A"/>
+    </linearGradient>
+    <radialGradient id="led" cx="0.35" cy="0.3" r="1">
+      <stop offset="0" stop-color="#C6FFDD"/>
+      <stop offset="0.45" stop-color="#4ADE80"/>
+      <stop offset="1" stop-color="#15803D"/>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <filter id="softer" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <g id="glyph">
+      <rect x="26" y="556" width="588" height="50" rx="14" fill="url(#road)"/>
+      <rect x="26" y="556" width="588" height="8" rx="4" fill="#FFFFFF" opacity="0.25"/>
+      <ellipse cx="118" cy="562" rx="120" ry="16" fill="#000000" opacity="0.35" filter="url(#soft)"/>
+      <g transform="rotate(-40 115 285)">
+        <rect x="100" y="272" width="452" height="60" rx="30" fill="#0A1B33" opacity="0.30" filter="url(#soft)" transform="translate(10 14)"/>
+      </g>
+      <g fill="none" stroke-linecap="round">
+        <path d="M 448 268 A 330 330 0 0 0 409 135" stroke="#4ADE80" stroke-width="26" opacity="0.45" filter="url(#softer)"/>
+        <path d="M 378 273 A 260 260 0 0 0 347 168" stroke="#4ADE80" stroke-width="26" opacity="0.8"/>
+      </g>
+      <g>
+        <ellipse cx="375" cy="552" rx="92" ry="14" fill="#000000" opacity="0.28" filter="url(#soft)"/>
+        <rect x="288" y="368" width="174" height="174" rx="26" fill="#4ADE80" opacity="0.24" filter="url(#soft)"/>
+        <rect x="296" y="376" width="158" height="158" rx="20" fill="#FFFFFF"/>
+        <rect x="296" y="376" width="158" height="158" rx="20" fill="none" stroke="#0A1B33" stroke-opacity="0.08" stroke-width="2"/>
+        <g transform="translate(312,392)">
+          <rect x="0" y="0" width="40" height="40" rx="7" fill="#16213E"/>
+          <rect x="7" y="7" width="26" height="26" rx="4" fill="#FFFFFF"/>
+          <rect x="14" y="14" width="12" height="12" rx="2" fill="#16213E"/>
+        </g>
+        <g transform="translate(400,392)">
+          <rect x="0" y="0" width="40" height="40" rx="7" fill="#16213E"/>
+          <rect x="7" y="7" width="26" height="26" rx="4" fill="#FFFFFF"/>
+          <rect x="14" y="14" width="12" height="12" rx="2" fill="#16213E"/>
+        </g>
+        <g transform="translate(312,480)">
+          <rect x="0" y="0" width="40" height="40" rx="7" fill="#16213E"/>
+          <rect x="7" y="7" width="26" height="26" rx="4" fill="#FFFFFF"/>
+          <rect x="14" y="14" width="12" height="12" rx="2" fill="#16213E"/>
+        </g>
+        <g fill="#16213E">
+          <rect x="360" y="444" width="16" height="16" rx="3"/>
+          <rect x="408" y="444" width="16" height="16" rx="3"/>
+          <rect x="384" y="462" width="14" height="14" rx="3"/>
+          <rect x="360" y="484" width="16" height="16" rx="3"/>
+          <rect x="404" y="500" width="16" height="16" rx="3"/>
+          <rect x="382" y="500" width="14" height="14" rx="3"/>
+          <rect x="404" y="478" width="16" height="16" rx="3"/>
+        </g>
+      </g>
+      <g transform="rotate(-40 115 285)">
+        <clipPath id="armclip">
+          <rect x="95" y="254" width="460" height="62" rx="31"/>
+        </clipPath>
+        <rect x="95" y="254" width="460" height="62" rx="31" fill="url(#boom)"/>
+        <g clip-path="url(#armclip)">
+          <rect x="200" y="248" width="88" height="76" fill="url(#stripe)"/>
+          <rect x="368" y="248" width="88" height="76" fill="url(#stripe)"/>
+          <rect x="98" y="259" width="454" height="12" rx="6" fill="#FFFFFF" opacity="0.55"/>
+          <rect x="529" y="254" width="26" height="62" fill="#8FA1AD" opacity="0.55"/>
+        </g>
+      </g>
+      <rect x="128" y="252" width="58" height="308" rx="16" fill="url(#cabinetSide)"/>
+      <clipPath id="cabclip">
+        <rect x="58" y="242" width="112" height="318" rx="20"/>
+      </clipPath>
+      <rect x="58" y="242" width="112" height="318" rx="20" fill="url(#cabinet)"/>
+      <g clip-path="url(#cabclip)">
+        <rect x="58" y="242" width="112" height="16" fill="#FFFFFF" opacity="0.75"/>
+        <rect x="58" y="482" width="112" height="34" fill="url(#stripe)"/>
+        <rect x="58" y="482" width="112" height="8" fill="#FFFFFF" opacity="0.35"/>
+        <rect x="58" y="330" width="112" height="4" fill="#7C8E9C" opacity="0.45"/>
+        <rect x="58" y="452" width="112" height="4" fill="#7C8E9C" opacity="0.45"/>
+      </g>
+      <circle cx="115" cy="285" r="44" fill="#22C55E" opacity="0.30" filter="url(#soft)"/>
+      <circle cx="115" cy="285" r="29" fill="url(#led)"/>
+      <circle cx="107" cy="276" r="9" fill="#FFFFFF" opacity="0.7"/>
+    </g>
+  </defs>
+  <!-- Transparent canvas: only the glyph, scaled/centered into Android's
+       adaptive-icon safe zone (inner ~66% diameter). Background color is
+       supplied separately by app.json android.adaptiveIcon.backgroundColor. -->
+  <use href="#glyph" transform="translate(240,240) scale(0.85)"/>
+</svg>
