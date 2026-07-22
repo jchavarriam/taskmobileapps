@@ -30,7 +30,7 @@
         "backgroundColor": "#1E3A8A"
       },
       "package": "com.taskontrol.residente",
-      "versionCode": 10,
+      "versionCode": 11,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
