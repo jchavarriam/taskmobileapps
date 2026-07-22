@@ -1,13 +1,34 @@
 // mobile/app/(tabs)/index.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '@/lib/auth';
 import { getServerUrl } from '@/lib/storage';
+
+// Writes a base64 image the portal handed us to a temp file and opens the
+// OS's native share sheet — the standard pattern for sharing tickets,
+// passes, and QR codes (WhatsApp, boarding passes, payment QR, etc.), and
+// more reliable than routing through the system browser.
+async function shareQrImage(imageBase64: string, filename: string) {
+  try {
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const file = new File(Paths.cache, filename || 'qr.jpg');
+    file.write(base64Data, { encoding: 'base64' });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(file.uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg' });
+    } else {
+      console.error('Sharing.isAvailableAsync() returned false');
+    }
+  } catch (e) {
+    console.error('failed to share QR image', e);
+  }
+}
 
 // Version/OTA identity shown by the web portal (Perfil) — lets support see
 // which bundle a device is actually running. updateId is null on the factory
@@ -144,22 +165,11 @@ export default function HomeTab() {
   // show the target URL in logs for debugging
   console.log('using serverUrl for WebView:', serverUrl);
 
-  // The portal's QR-download button can't use a browser <a download> trick
-  // inside this WebView (no-op on iOS, unreliable on Android for data:
-  // URIs). Instead it posts us a real image URL to open in the system
-  // browser, where normal download/save behavior works. Restrict to the
-  // portal's own origin so the page can't direct us to open anything else.
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data?.type === 'download-qr' && typeof data.url === 'string') {
-        const requestedOrigin = new URL(data.url).origin;
-        const allowedOrigin = new URL(serverUrl).origin;
-        if (requestedOrigin === allowedOrigin) {
-          Linking.openURL(data.url).catch((e) => console.error('failed to open download url', e));
-        } else {
-          console.error('blocked download-qr message with mismatched origin', requestedOrigin);
-        }
+      if (data?.type === 'share-qr' && typeof data.imageBase64 === 'string') {
+        void shareQrImage(data.imageBase64, typeof data.filename === 'string' ? data.filename : 'qr.jpg');
       }
     } catch (e) {
       console.error('failed to handle WebView message', e);
