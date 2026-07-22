@@ -1,7 +1,7 @@
 // mobile/app/(tabs)/index.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
@@ -144,6 +144,28 @@ export default function HomeTab() {
   // show the target URL in logs for debugging
   console.log('using serverUrl for WebView:', serverUrl);
 
+  // The portal's QR-download button can't use a browser <a download> trick
+  // inside this WebView (no-op on iOS, unreliable on Android for data:
+  // URIs). Instead it posts us a real image URL to open in the system
+  // browser, where normal download/save behavior works. Restrict to the
+  // portal's own origin so the page can't direct us to open anything else.
+  const handleWebViewMessage = (event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data?.type === 'download-qr' && typeof data.url === 'string') {
+        const requestedOrigin = new URL(data.url).origin;
+        const allowedOrigin = new URL(serverUrl).origin;
+        if (requestedOrigin === allowedOrigin) {
+          Linking.openURL(data.url).catch((e) => console.error('failed to open download url', e));
+        } else {
+          console.error('blocked download-qr message with mismatched origin', requestedOrigin);
+        }
+      }
+    } catch (e) {
+      console.error('failed to handle WebView message', e);
+    }
+  };
+
   return (
     <View style={[styles.webContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <WebView
@@ -153,6 +175,7 @@ export default function HomeTab() {
         domStorageEnabled
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        onMessage={handleWebViewMessage}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.error('WebView error loading', nativeEvent);
